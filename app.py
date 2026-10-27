@@ -234,6 +234,7 @@ def show_evaluation_result(evaluation):
 
     st.subheader("답변별 평가")
     questions = {item["no"]: item["question"] for item in st.session_state.record}
+    turns_by_no = {item["no"]: item["turns"] for item in st.session_state.record}
     for answer in evaluation["answers"]:
         total = coach.answer_total(answer)
         with st.expander(f"질문 {answer['no']} · 답변 점수 {total}/20"):
@@ -245,6 +246,11 @@ def show_evaluation_result(evaluation):
             for col, label, key in zip(cols, labels, coach.CRITERIA):
                 col.metric(label, f"{scores[key]}/{coach.CRITERION_MAX}")
             st.write(f"가장 약한 점: {answer['weak']}")
+            # 첫 turn 은 기본 질문이라 위 caption 에 이미 있다. 꼬리 질문 · 되묻기 주고받은 말까지 보여 준다
+            my_turns = turns_by_no.get(answer["no"], [])[1:]
+            if my_turns and st.toggle("내 답변 보기", key=f"show_my_answer_{answer['no']}"):
+                for who, text in my_turns:
+                    st.markdown(f"**{'나' if who == '지원자' else '면접관'}**  \n{text}")
             if coach.needs_rewrite(answer):
                 st.markdown("**고친 답**")
                 st.write(answer["rewrite"])
