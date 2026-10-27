@@ -1,4 +1,3 @@
-import pandas as pd
 import streamlit as st
 
 import coach
@@ -6,6 +5,7 @@ from llm import LLMError, ask_json
 from prompts import CONTEXT, EVAL_SCHEMA, EVALUATOR, INTERVIEWER, INTERVIEWER_SCHEMA, PERSONA
 
 MIN_EXPERIENCE_LEN = 30
+MAX_EXPERIENCE_LEN = 300
 END_MESSAGE = "수고하셨습니다. 면접이 끝났어요."
 
 st.set_page_config(page_title="AI 면접 코치", page_icon="🎤")
@@ -18,6 +18,11 @@ def get_questions():
 
 def reset():
     st.session_state.clear()
+
+
+def question_label(no, follow_up_no=0):
+    """화면에만 붙이는 번호표. Q-1 은 기본 질문, Q-1-1 은 그 질문의 꼬리 질문."""
+    return f"Q-{no}-{follow_up_no}" if follow_up_no else f"Q-{no}"
 
 
 def start_interview(name, job, company, experience):
@@ -43,7 +48,7 @@ def start_interview(name, job, company, experience):
     st.session_state.done = False
     st.session_state.messages = [
         {"role": "assistant", "content": f"안녕하세요, {name}님. 면접을 시작할게요."},
-        {"role": "assistant", "content": first},
+        {"role": "assistant", "content": first, "label": question_label(1)},
     ]
     st.rerun()
 
@@ -54,7 +59,11 @@ def show_start():
         name = st.text_input("이름")
         job = st.selectbox("지원 직군", coach.DESIGN_JOBS)
         company = st.text_input("지원 회사")
-        experience = st.text_area("내 경험 (직접 한 일을 구체적으로)", height=160)
+        experience = st.text_area(
+            "내 경험 (직접 한 일을 구체적으로)",
+            height=160,
+            max_chars=MAX_EXPERIENCE_LEN,
+        )
         submitted = st.form_submit_button("면접 시작")
     if not submitted:
         return
@@ -120,12 +129,20 @@ def handle_answer(answer):
     if result["clarify"] and reply and coach.can_clarify(state.clarifications):
         state.clarifications += 1
         state.record[idx]["turns"] = turns + [("면접관", reply)]
-        state.messages.append({"role": "assistant", "content": reply})
+        state.messages.append(
+            {"role": "assistant", "content": reply, "label": f"{question_label(idx + 1)} 다시 설명"}
+        )
     # AI 가 더 묻자고 해도 질문당 꼬리 질문 횟수는 코드가 막는다
     elif result["follow_up"] and reply and coach.can_follow_up(state.follow_ups):
         state.follow_ups += 1
         state.record[idx]["turns"] = turns + [("면접관", reply)]
-        state.messages.append({"role": "assistant", "content": reply})
+        state.messages.append(
+            {
+                "role": "assistant",
+                "content": reply,
+                "label": question_label(idx + 1, state.follow_ups),
+            }
+        )
     elif is_last:
         state.record[idx]["turns"] = turns
         state.done = True
@@ -139,7 +156,9 @@ def handle_answer(answer):
         state.record.append(
             {"no": state.q_idx + 1, "question": next_question, "turns": [("면접관", next_question)]}
         )
-        state.messages.append({"role": "assistant", "content": next_question})
+        state.messages.append(
+            {"role": "assistant", "content": next_question, "label": question_label(state.q_idx + 1)}
+        )
     st.rerun()
 
 
@@ -157,6 +176,8 @@ def show_sidebar():
 def show_chat():
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
+            if "label" in message:
+                st.markdown(f"**{message['label']}**")
             st.write(message["content"])
     if st.session_state.done:
         st.info("면접이 끝났어요. '📊 평가' 탭에서 평가를 받아 보세요.")
@@ -177,20 +198,27 @@ def run_evaluation():
             st.error(str(e))
 
 
+def score_color(score):
+    if score >= 8:
+        return "green"
+    if score >= 5:
+        return "orange"
+    return "red"
+
+
 def show_evaluation_result(evaluation):
     panel = evaluation["panel"]
     st.metric("위원 평균 (0~10)", coach.panel_average(panel))
-    st.dataframe(
-        pd.DataFrame(
-            {
-                "위원": [m["role"] for m in panel],
-                "뽑지 말아야 할 이유": [m["against"] for m in panel],
-                "좋은 점": [m["good"] for m in panel],
-                "점수": coach.panel_scores(panel),
-            }
-        ),
-        hide_index=True,
-    )
+    scores = coach.panel_scores(panel)
+    columns = st.columns(2)
+    for i, member in enumerate(panel):
+        with columns[i % 2].container(border=True):
+            title, tag = st.columns([3, 1], vertical_alignment="center")
+            title.markdown(f"**{member['role']}**")
+            with tag.container(horizontal_alignment="right"):
+                st.badge(f"{scores[i]}/{coach.PANEL_MAX}점", color=score_color(scores[i]))
+            st.markdown(f"**뽑지 말아야 할 이유**  \n{member['against']}")
+            st.markdown(f"**좋은 점**  \n{member['good']}")
     st.markdown(f"**갈린 곳**  \n{evaluation['conflict']}")
     st.markdown(f"**같은 판단**  \n{evaluation['agree']}")
 
