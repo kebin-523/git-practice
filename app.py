@@ -53,7 +53,17 @@ def start_interview(name, job, company, experience):
     st.rerun()
 
 
+# 글자 수(0/300)는 Streamlit 이 입력창 안에 겹쳐 그려서 잘 안 보이므로 입력창 아래로 내린다
+COUNTER_CSS = """<style>
+[data-testid="stTextArea"] { padding-bottom: 1.6rem; }
+[data-testid="stTextArea"] [data-testid="InputInstructions"] {
+    bottom: 0; right: 0.25rem; font-size: 0.85rem; color: inherit; opacity: 0.8;
+}
+</style>"""
+
+
 def show_start():
+    st.markdown(COUNTER_CSS, unsafe_allow_html=True)
     st.title("AI 면접 코치 · 디자인 직군")
     with st.form("start"):
         name = st.text_input("이름")
