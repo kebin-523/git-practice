@@ -2,7 +2,7 @@ import streamlit as st
 
 import coach
 from llm import LLMError, ask_json
-from prompts import CONTEXT, INTERVIEWER, INTERVIEWER_SCHEMA, PERSONAS
+from prompts import CONTEXT, INTERVIEWER, INTERVIEWER_SCHEMA, PERSONA
 
 MIN_EXPERIENCE_LEN = 30
 END_MESSAGE = "수고하셨습니다. 면접이 끝났어요."
@@ -46,10 +46,10 @@ def start_interview(name, job, company, experience):
 
 
 def show_start():
-    st.title("AI 면접 코치")
+    st.title("AI 면접 코치 · 디자인 직군")
     with st.form("start"):
         name = st.text_input("이름")
-        job = st.selectbox("지원 직군", list(PERSONAS))
+        job = st.selectbox("지원 직군", coach.DESIGN_JOBS)
         company = st.text_input("지원 회사")
         experience = st.text_area("내 경험 (직접 한 일을 구체적으로)", height=160)
         submitted = st.form_submit_button("면접 시작")
@@ -71,7 +71,7 @@ def build_instructions(profile, question, is_last):
         experience=profile["experience"],
     )
     return INTERVIEWER.format(
-        persona=PERSONAS[profile["job"]],
+        persona=PERSONA,
         context=context,
         experience=profile["experience"],
         question=question["질문"],

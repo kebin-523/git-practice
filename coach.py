@@ -6,6 +6,7 @@ TOTAL_QUESTIONS = 5
 MAX_FOLLOW_UPS = 1
 
 QUESTIONS_PATH = Path(__file__).parent / "data" / "questions.csv"
+DESIGN_JOBS = ["프로덕트 디자인", "UX/UI 디자인", "그래픽 디자인", "브랜드 디자인"]
 QUESTION_TYPES = ["자기소개", "공통", "직무", "경험", "상황"]
 SHARED_JOB = "공통"
 
