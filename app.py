@@ -35,6 +35,7 @@ def start_interview(name, job, company, experience):
     st.session_state.questions = questions
     st.session_state.q_idx = 0
     st.session_state.follow_ups = 0
+    st.session_state.clarifications = 0
     st.session_state.understanding = 0
     st.session_state.turns = [("면접관", first)]
     st.session_state.done = False
@@ -92,6 +93,7 @@ def handle_answer(answer):
     turns = state.turns + [("지원자", answer)]
     user_input = "\n".join(f"{who}: {text}" for who, text in turns)
     user_input += f"\n\n[직전 understanding] {state.understanding}"
+    user_input += f"\n[이번 질문에서 되묻기에 답한 횟수] {state.clarifications}"
 
     with st.spinner("면접관이 듣고 있어요..."):
         try:
@@ -109,8 +111,13 @@ def handle_answer(answer):
     state.understanding = coach.clamp_understanding(result["understanding"])
     reply = result["reply"].strip()
 
+    # 되묻기 응답은 꼬리 질문 횟수를 쓰지 않고, 되묻기 횟수는 코드가 따로 막는다
+    if result["clarify"] and reply and coach.can_clarify(state.clarifications):
+        state.clarifications += 1
+        state.turns = turns + [("면접관", reply)]
+        state.messages.append({"role": "assistant", "content": reply})
     # AI 가 더 묻자고 해도 질문당 꼬리 질문 횟수는 코드가 막는다
-    if result["follow_up"] and reply and coach.can_follow_up(state.follow_ups):
+    elif result["follow_up"] and reply and coach.can_follow_up(state.follow_ups):
         state.follow_ups += 1
         state.turns = turns + [("면접관", reply)]
         state.messages.append({"role": "assistant", "content": reply})
@@ -120,6 +127,7 @@ def handle_answer(answer):
     else:
         state.q_idx = idx + 1
         state.follow_ups = 0
+        state.clarifications = 0
         next_question = state.questions[state.q_idx]["질문"]
         state.turns = [("면접관", next_question)]
         state.messages.append({"role": "assistant", "content": next_question})

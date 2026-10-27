@@ -4,6 +4,7 @@ import pandas as pd
 
 TOTAL_QUESTIONS = 5
 MAX_FOLLOW_UPS = 1
+MAX_CLARIFICATIONS = 2
 
 QUESTIONS_PATH = Path(__file__).parent / "data" / "questions.csv"
 DESIGN_JOBS = ["프로덕트 디자인", "UX/UI 디자인", "그래픽 디자인", "브랜드 디자인"]
@@ -29,6 +30,11 @@ def pick_questions(df, job):
 
 def can_follow_up(follow_ups_done):
     return follow_ups_done < MAX_FOLLOW_UPS
+
+
+def can_clarify(clarifications_done):
+    """되묻기 응답은 꼬리 질문 횟수와 따로 센다."""
+    return clarifications_done < MAX_CLARIFICATIONS
 
 
 def clamp_understanding(value):
