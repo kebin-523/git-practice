@@ -39,3 +39,43 @@ def can_clarify(clarifications_done):
 
 def clamp_understanding(value):
     return max(0, min(100, int(value)))
+
+
+PANEL_MAX = 10
+CRITERION_MAX = 5
+CRITERIA = ["specific", "relevance", "structure", "evidence"]
+REWRITE_BELOW = 14
+
+
+def _clamp(value, high):
+    return max(0, min(high, int(value)))
+
+
+def panel_scores(panel):
+    return [_clamp(member["score"], PANEL_MAX) for member in panel]
+
+
+def panel_average(panel):
+    scores = panel_scores(panel)
+    return round(sum(scores) / len(scores), 1) if scores else 0.0
+
+
+def criterion_scores(answer):
+    return {name: _clamp(answer[name], CRITERION_MAX) for name in CRITERIA}
+
+
+def answer_total(answer):
+    return sum(criterion_scores(answer).values())
+
+
+def needs_rewrite(answer):
+    return answer_total(answer) < REWRITE_BELOW
+
+
+def format_record(record):
+    """면접 기록(질문별 주고받은 말)을 평가 프롬프트에 넣을 글로 만든다."""
+    blocks = []
+    for item in record:
+        lines = [f"[질문 {item['no']}]"] + [f"{who}: {text}" for who, text in item["turns"]]
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
