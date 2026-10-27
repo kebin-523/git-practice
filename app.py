@@ -1,8 +1,18 @@
+import pandas as pd
 import streamlit as st
 
 import coach
 from llm import LLMError, ask_json
-from prompts import CONTEXT, EVAL_SCHEMA, EVALUATOR, INTERVIEWER, INTERVIEWER_SCHEMA, PERSONA
+from prompts import (
+    CONTEXT,
+    EVAL_SCHEMA,
+    EVALUATOR,
+    INTERVIEWER,
+    INTERVIEWER_SCHEMA,
+    PERSONA,
+    RETRY,
+    RETRY_SCHEMA,
+)
 
 MIN_EXPERIENCE_LEN = 30
 MAX_EXPERIENCE_LEN = 300
@@ -45,6 +55,7 @@ def start_interview(name, job, company, experience):
     st.session_state.understanding = 0
     st.session_state.record = [{"no": 1, "question": first, "turns": [("면접관", first)]}]
     st.session_state.evaluation = None
+    st.session_state.retries = {}
     st.session_state.done = False
     st.session_state.messages = [
         {"role": "assistant", "content": f"안녕하세요, {name}님. 면접을 시작할게요."},
@@ -242,9 +253,8 @@ def show_evaluation_result(evaluation):
                 st.caption(questions[answer["no"]])
             scores = coach.criterion_scores(answer)
             cols = st.columns(len(coach.CRITERIA))
-            labels = ["구체성", "직무 연관", "구조", "근거 · 검증"]
-            for col, label, key in zip(cols, labels, coach.CRITERIA):
-                col.metric(label, f"{scores[key]}/{coach.CRITERION_MAX}")
+            for col, key in zip(cols, coach.CRITERIA):
+                col.metric(coach.CRITERIA_LABELS[key], f"{scores[key]}/{coach.CRITERION_MAX}")
             st.write(f"가장 약한 점: {answer['weak']}")
             # 첫 turn 은 기본 질문이라 위 caption 에 이미 있다. 꼬리 질문 · 되묻기 주고받은 말까지 보여 준다
             my_turns = turns_by_no.get(answer["no"], [])[1:]
@@ -275,15 +285,79 @@ def show_evaluation():
         show_evaluation_result(state.evaluation)
 
 
+def run_retry(question, answer):
+    state = st.session_state
+    instructions = RETRY.format(context=build_context(state.profile))
+    user_input = f"[질문] {question}\n[지원자의 답] {answer}"
+    with st.spinner("다시 채점하고 있어요..."):
+        try:
+            return ask_json(instructions, user_input, RETRY_SCHEMA, "retry")
+        except LLMError as e:
+            st.error(str(e))
+            return None
+
+
+def show_comparison(before, after):
+    result = coach.compare(before, after)
+    st.metric(
+        "다시 채점 점수",
+        f"{result['after_total']}/{coach.CRITERION_MAX * len(coach.CRITERIA)}",
+        delta=result["delta"],
+    )
+    st.dataframe(
+        pd.DataFrame(
+            {
+                "기준": [coach.CRITERIA_LABELS[r["criterion"]] for r in result["rows"]],
+                "전": [r["before"] for r in result["rows"]],
+                "후": [r["after"] for r in result["rows"]],
+                "차이": [r["delta"] for r in result["rows"]],
+            }
+        ),
+        hide_index=True,
+    )
+    st.write(f"가장 약한 점: {after['weak']}")
+
+
+def show_retry():
+    state = st.session_state
+    if not state.evaluation:
+        st.info("'📊 평가' 탭에서 평가를 먼저 받으면 재도전할 수 있어요.")
+        return
+    answers = {a["no"]: a for a in coach.lowest_first(state.evaluation["answers"])}
+    questions = {item["no"]: item["question"] for item in state.record}
+    no = st.selectbox(
+        "다시 답할 질문 (점수 낮은 순)",
+        list(answers),
+        format_func=lambda n: f"질문 {n} · {coach.answer_total(answers[n])}/20 · {questions.get(n, '')}",
+    )
+    before = answers[no]
+    st.markdown(f"**질문 {no}**  \n{questions.get(no, '')}")
+    st.write(f"지난 점수: {coach.answer_total(before)}/20")
+    st.write(f"가장 약한 점: {before['weak']}")
+
+    new_answer = st.text_area("다시 답하기", key=f"retry_answer_{no}", height=160)
+    if st.button("다시 채점"):
+        if not new_answer.strip():
+            st.warning("답을 적은 뒤에 눌러 주세요.")
+        else:
+            after = run_retry(questions.get(no, ""), new_answer.strip())
+            if after:
+                state.retries[no] = after
+    if no in state.retries:
+        show_comparison(before, state.retries[no])
+
+
 def show_interview():
     profile = st.session_state.profile
     st.title(f"{profile['company']} {profile['job']} 모의면접")
     show_sidebar()
-    chat_tab, eval_tab = st.tabs(["💬 면접", "📊 평가"])
+    chat_tab, eval_tab, retry_tab = st.tabs(["💬 면접", "📊 평가", "🔁 재도전"])
     with chat_tab:
         show_chat()
     with eval_tab:
         show_evaluation()
+    with retry_tab:
+        show_retry()
     if st.session_state.done:
         return
     answer = st.chat_input("답변을 입력하세요")

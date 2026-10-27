@@ -44,6 +44,12 @@ def clamp_understanding(value):
 PANEL_MAX = 10
 CRITERION_MAX = 5
 CRITERIA = ["specific", "relevance", "structure", "evidence"]
+CRITERIA_LABELS = {
+    "specific": "구체성",
+    "relevance": "직무 연관",
+    "structure": "구조",
+    "evidence": "근거 · 검증",
+}
 REWRITE_BELOW = 14
 
 
@@ -66,6 +72,33 @@ def criterion_scores(answer):
 
 def answer_total(answer):
     return sum(criterion_scores(answer).values())
+
+
+def compare(before, after):
+    """같은 답에 대한 전/후 채점을 비교한다. 합계 · 차이는 코드가 계산한다."""
+    before_scores = criterion_scores(before)
+    after_scores = criterion_scores(after)
+    before_total = sum(before_scores.values())
+    after_total = sum(after_scores.values())
+    return {
+        "before_total": before_total,
+        "after_total": after_total,
+        "delta": after_total - before_total,
+        "rows": [
+            {
+                "criterion": name,
+                "before": before_scores[name],
+                "after": after_scores[name],
+                "delta": after_scores[name] - before_scores[name],
+            }
+            for name in CRITERIA
+        ],
+    }
+
+
+def lowest_first(answers):
+    """답변 점수가 낮은 순(같으면 질문 번호 순)으로 정렬한다."""
+    return sorted(answers, key=lambda a: (answer_total(a), a["no"]))
 
 
 def needs_rewrite(answer):
